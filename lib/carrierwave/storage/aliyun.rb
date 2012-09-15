@@ -3,27 +3,29 @@ require 'carrierwave'
 require 'digest/hmac'
 require 'digest/md5'
 require "rest-client"
+require 'mime/types'
 
 module CarrierWave
   module Storage
     class Aliyun < Abstract
-      
+
       class Connection
         def initialize(options={})
           @aliyun_access_id = options[:aliyun_access_id]
           @aliyun_access_key = options[:aliyun_access_key]
           @aliyun_bucket = options[:aliyun_bucket]
         end
-        
+
         def put(path, file)
           content_md5 = Digest::MD5.hexdigest(file)
-          content_type = "image/jpg"
+          content_type = ::MIME::Types.type_for(file).first.to_s
+
           date = Time.now.gmtime.strftime("%a, %d %b %Y %H:%M:%S GMT")
           path = "#{@aliyun_bucket}/#{path}"
           url = "http://storage.aliyun.com/#{path}"
           auth_sign = sign("PUT", path, content_md5, content_type ,date)
           headers = {
-            "Authorization" => auth_sign, 
+            "Authorization" => auth_sign,
             "Content-Type" => content_type,
             "Content-Length" => file.length,
             "Date" => date,
@@ -32,15 +34,15 @@ module CarrierWave
           }
           response = RestClient.put(url, file, headers)
         end
-        
+
         def get(path)
-          @http.get(path)            
+          @http.get(path)
         end
-          
-      private      
+
+      private
         def sign(verb, path, content_md5 = '', content_type = '', date)
           canonicalized_oss_headers = ''
-          canonicalized_resource = "/#{path}"          
+          canonicalized_resource = "/#{path}"
           string_to_sign = "#{verb}\n\n#{content_type}\n#{date}\n#{canonicalized_oss_headers}#{canonicalized_resource}"
           digest = OpenSSL::Digest::Digest.new('sha1')
           h = OpenSSL::HMAC.digest(digest, @aliyun_access_key, string_to_sign)
@@ -112,16 +114,16 @@ module CarrierWave
 
           def oss_connection
             return @oss_connection if @oss_connection
-            
-            config = {:aliyun_access_id => @uploader.aliyun_access_id, 
-              :aliyun_access_key => @uploader.aliyun_access_key, 
+
+            config = {:aliyun_access_id => @uploader.aliyun_access_id,
+              :aliyun_access_key => @uploader.aliyun_access_key,
               :aliyun_bucket => @uploader.aliyun_bucket
             }
             @oss_connection ||= CarrierWave::Storage::Aliyun::Connection.new(config)
           end
 
       end
-      
+
       def store!(file)
         f = CarrierWave::Storage::Aliyun::File.new(uploader, self, uploader.store_path)
         f.store(file.read)
